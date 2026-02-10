@@ -1,0 +1,24 @@
+{
+  "name": "nexus",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:api": "turbo run dev --filter=@nexus/api",
+    "dev:web": "turbo run dev --filter=@nexus/web",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

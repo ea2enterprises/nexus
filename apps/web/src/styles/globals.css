@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme {
+  /* ─── NEXUS Color Tokens ─────────────────────────────── */
+  --color-navy: #0A1628;
+  --color-navy-light: #141C2B;
+  --color-charcoal: #1A2332;
+  --color-surface-dark: #141C2B;
+  --color-surface-light: #F4F6FA;
+  --color-border-dark: #2A3A52;
+  --color-border-light: #D9E1EC;
+
+  --color-electric: #2D7FF9;
+  --color-electric-hover: #1A6AE0;
+  --color-profit: #00C48C;
+  --color-profit-bg: rgba(0, 196, 140, 0.1);
+  --color-loss: #FF4757;
+  --color-loss-bg: rgba(255, 71, 87, 0.1);
+  --color-caution: #FFB020;
+  --color-caution-bg: rgba(255, 176, 32, 0.1);
+  --color-halt: #D32F2F;
+
+  --color-text-primary-dark: #E8ECF1;
+  --color-text-primary-light: #1A1F36;
+  --color-text-secondary: #8492A6;
+
+  /* ─── Typography ─────────────────────────────────────── */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* ─── Shadows ────────────────────────────────────────── */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.24);
+}
+
+/* ─── Base Styles ──────────────────────────────────────── */
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-navy);
+  color: var(--color-text-primary-dark);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Scrollbar ────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-navy);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-dark);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* ─── Tabular Numbers ──────────────────────────────────── */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Animations ───────────────────────────────────────── */
+@keyframes pulse-signal {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+
+.animate-pulse-signal {
+  animation: pulse-signal 2s ease-in-out infinite;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--color-surface-dark) 25%, var(--color-border-dark) 50%, var(--color-surface-dark) 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
