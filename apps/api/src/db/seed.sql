@@ -9,7 +9,7 @@ INSERT INTO users (id, email, password_hash, display_name, tier, referral_code, 
 VALUES (
     'a0000000-0000-0000-0000-000000000001',
     'demo@nexus.dev',
-    '$2b$12$LJ3m4ys3Lk0TSwHvW1Q/H.K9.3YO7S6tBMVDBrdPFGnGW6jkSO/Cm',
+    '$2b$12$caDE9ImMRSIgBCqA/0Lm0.mQLYRWOv.BDmZewXibTfGRI5SKo6UNO',
     'Demo Trader',
     'pro',
     'DEMO2026',
