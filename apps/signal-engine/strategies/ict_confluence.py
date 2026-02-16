@@ -32,8 +32,10 @@ KILLZONES = [
     {"name": "London Close",  "start": (15, 0), "end": (17, 0), "bonus": 0},
 ]
 
-PAYOUT_PERCENT = 88.0
 MIN_PAYOUT_PERCENT = 70
+
+# Dynamic payout: simulates real broker payouts varying by instrument/session
+PAYOUT_RANGE = (75, 92)  # realistic broker payout range
 MIN_CONFIDENCE = 90
 
 
@@ -383,14 +385,18 @@ def analyze(candles: list[Candle], instrument: str, killzone: dict) -> Signal | 
     if confidence < MIN_CONFIDENCE:
         return None
 
-    # 8. Payout Filter — only broadcast if broker payout >= 70%
-    if PAYOUT_PERCENT < MIN_PAYOUT_PERCENT:
+    # 8. Dynamic Payout — simulate broker payout for this instrument/session
+    payout = random.randint(PAYOUT_RANGE[0], PAYOUT_RANGE[1])
+
+    # 9. Payout Filter — only broadcast if broker payout >= 70%
+    if payout < MIN_PAYOUT_PERCENT:
         return None
 
     # ── Build Signal ────────────────────────────────────────
     direction = "BUY" if sweep.direction == "bullish" else "SELL"
     strike = compute_strike_price(fvg, instrument)
 
+    # Strict candle alignment: start_time must be exactly :00 (top of next minute)
     now = datetime.now(timezone.utc)
     next_min = math.ceil(now.timestamp() / 60) * 60
     start_time = datetime.fromtimestamp(next_min, tz=timezone.utc).isoformat()
@@ -405,7 +411,7 @@ def analyze(candles: list[Candle], instrument: str, killzone: dict) -> Signal | 
         confirming_strategies=["LIQ-SWEEP", "MSS", "FVG", "SMC-OB", "EMA-TREND", "VOLUME"],
         strike_price=strike,
         expiration_seconds=60,
-        payout_percent=PAYOUT_PERCENT,
+        payout_percent=float(payout),
         position_size_percent=5.0,
         start_time=start_time,
         meta=SignalMeta(

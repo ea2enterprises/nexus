@@ -27,7 +27,7 @@ SESSIONS = ["Tokyo", "London", "New York", "Sydney"]
 
 # All signal types use a fixed 60-second binary option duration
 EXPIRATION_SECONDS = 60
-PAYOUT_PERCENT = 88.0
+PAYOUT_RANGE = (70, 92)  # dynamic broker payout range
 
 # Approximate current prices for realistic strike prices
 BASE_PRICES = {
@@ -66,7 +66,7 @@ def generate_mock_signal() -> Signal:
     strike_price = round(base_price + price_offset, 3 if is_jpy else 5)
 
     expiration_seconds = EXPIRATION_SECONDS
-    payout_percent = PAYOUT_PERCENT
+    payout_percent = float(random.randint(PAYOUT_RANGE[0], PAYOUT_RANGE[1]))
 
     now = datetime.now(timezone.utc)
 

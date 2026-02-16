@@ -10,6 +10,7 @@ import { MartingaleWidget } from '@/components/risk/MartingaleWidget';
 import { formatPrice, formatDuration, cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app.store';
 import { useTradeAudio } from '@/hooks/use-trade-audio';
+import { useWallClockSeconds } from '@/hooks/useWallClockSeconds';
 import { ArrowUpRight, ArrowDownRight, Clock, Copy, Check } from 'lucide-react';
 import type { Signal } from '@nexus/shared';
 
@@ -22,18 +23,12 @@ interface SignalCardProps {
 export function SignalCard({ signal, onExecute, onViewDetail }: SignalCardProps) {
   const { riskProfile } = useAppStore();
   const [copied, setCopied] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const now = useWallClockSeconds();
   const { playTick, playChime } = useTradeAudio();
   const lastTickSecRef = useRef(-1);
   const chimedRef = useRef(false);
   const isBuy = signal.direction === 'BUY';
   const instrument = signal.instrument;
-
-  // Tick every second for reactive phase tracking
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const copyStrike = useCallback(() => {
     const price = formatPrice(Number(signal.strike_price), instrument);

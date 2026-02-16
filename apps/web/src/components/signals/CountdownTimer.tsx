@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
-import { formatCountdown } from '@/lib/utils';
+import { cn, formatCountdown } from '@/lib/utils';
+import { useWallClockSeconds } from '@/hooks/useWallClockSeconds';
 
 interface CountdownTimerProps {
   startTime: number;   // absolute ms timestamp when trade begins
@@ -11,12 +10,7 @@ interface CountdownTimerProps {
 }
 
 export function CountdownTimer({ startTime, expiresAt, totalSeconds }: CountdownTimerProps) {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const now = useWallClockSeconds();
 
   const isPreparing = now < startTime;
   const isExpired = !isPreparing && now >= expiresAt;
@@ -26,7 +20,7 @@ export function CountdownTimer({ startTime, expiresAt, totalSeconds }: Countdown
     : Math.max(0, expiresAt - now);
 
   // For the progress bar: prep phase uses prep window, active phase uses trade duration
-  const prepDuration = startTime - (expiresAt - totalSeconds * 1000); // time between creation and start
+  const prepDuration = startTime - (expiresAt - totalSeconds * 1000);
   const totalMs = isPreparing ? Math.max(prepDuration, 1) : totalSeconds * 1000;
   const fraction = totalMs > 0 ? remaining / totalMs : 0;
 
