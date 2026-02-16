@@ -62,12 +62,8 @@ export function PresetSelector({ currentProfile, onApply }: PresetSelectorProps)
                 <span className="font-mono text-text-primary-dark">{preset.values.base_risk_percent}%</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-secondary">Steps</span>
-                <span className="font-mono text-text-primary-dark">{preset.values.martingale_steps}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-secondary">Multiplier</span>
-                <span className="font-mono text-text-primary-dark">{preset.values.martingale_multiplier}x</span>
+                <span className="text-text-secondary">Recovery</span>
+                <span className="font-mono text-text-primary-dark">1 double-down</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-secondary">Weekly Limit</span>

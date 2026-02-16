@@ -4,8 +4,6 @@ export interface TradeRequest {
   entryPrice: number;
   positionSize: number;
   duration: number; // seconds for binary options
-  stopLoss?: number;
-  takeProfit?: number;
 }
 
 export interface TradeResponse {
@@ -17,7 +15,6 @@ export interface TradeResponse {
   entryTime: string;
   exitTime: string;
   pnl: number;
-  pnlPips: number;
   pnlPercent: number;
   isWin: boolean;
   payoutRate: number;

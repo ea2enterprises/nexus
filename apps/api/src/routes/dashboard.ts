@@ -26,7 +26,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     // Get recent signals
     const recentSignals = await sql`
       SELECT * FROM signals
-      ORDER BY timestamp_utc DESC
+      ORDER BY start_time DESC
       LIMIT 5
     `;
 
@@ -47,7 +47,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const [weekStats] = await sql`
       SELECT
         COUNT(*) as total,
-        COUNT(*) FILTER (WHERE result IN ('tp1', 'tp2', 'win')) as wins
+        COUNT(*) FILTER (WHERE result = 'win') as wins
       FROM trades
       WHERE user_id = ${userId} AND entry_time > NOW() - INTERVAL '7 days'
     `;

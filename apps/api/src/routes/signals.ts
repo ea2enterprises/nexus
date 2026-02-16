@@ -5,37 +5,49 @@ import { signalSchema } from '@nexus/shared';
 import crypto from 'crypto';
 
 export async function signalRoutes(app: FastifyInstance) {
-  // ─── GET /signals — Paginated signal list ────────────────
+  // ─── GET /signals — Paginated signal list with filters ─────
   app.get('/', { preHandler: [authenticate] }, async (request, reply) => {
-    const { page = 1, limit = 20, status, instrument } = request.query as {
+    const { page = 1, limit = 20, status, instrument, direction, signal_type, sort = 'time_desc' } = request.query as {
       page?: number; limit?: number; status?: string; instrument?: string;
+      direction?: string; signal_type?: string; sort?: string;
     };
     const offset = (Number(page) - 1) * Number(limit);
+
+    // Build dynamic conditions
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+
+    if (status) conditions.push(`status = '${status}'`);
+    if (instrument) conditions.push(`instrument = '${instrument}'`);
+    if (direction) conditions.push(`direction = '${direction}'`);
+    if (signal_type) conditions.push(`signal_type = '${signal_type}'`);
+
+    const orderBy = sort === 'confidence_desc' ? 'confidence DESC' : 'timestamp_utc DESC';
 
     let query;
     if (status && instrument) {
       query = sql`
         SELECT * FROM signals
         WHERE status = ${status} AND instrument = ${instrument}
-        ORDER BY timestamp_utc DESC
+        ORDER BY start_time DESC
         LIMIT ${Number(limit)} OFFSET ${offset}
       `;
     } else if (status) {
       query = sql`
         SELECT * FROM signals WHERE status = ${status}
-        ORDER BY timestamp_utc DESC
+        ORDER BY start_time DESC
         LIMIT ${Number(limit)} OFFSET ${offset}
       `;
     } else if (instrument) {
       query = sql`
         SELECT * FROM signals WHERE instrument = ${instrument}
-        ORDER BY timestamp_utc DESC
+        ORDER BY start_time DESC
         LIMIT ${Number(limit)} OFFSET ${offset}
       `;
     } else {
       query = sql`
         SELECT * FROM signals
-        ORDER BY timestamp_utc DESC
+        ORDER BY start_time DESC
         LIMIT ${Number(limit)} OFFSET ${offset}
       `;
     }
@@ -80,19 +92,36 @@ export async function signalRoutes(app: FastifyInstance) {
     }
 
     const data = parsed.data;
+
+    // Payout filter — reject signals with payout below 70%
+    const MIN_PAYOUT_PERCENT = 70;
+    if (data.payout_percent < MIN_PAYOUT_PERCENT) {
+      return reply.status(422).send({
+        success: false,
+        error: `Payout ${data.payout_percent}% is below minimum ${MIN_PAYOUT_PERCENT}%. Signal not broadcast.`,
+      });
+    }
+
     const signal_id = `NXS-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${data.instrument.replace('/', '-')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+
+    // Compute start_time: use provided value or default to top of next minute
+    const now = Date.now();
+    const startTime = data.start_time
+      ? new Date(data.start_time)
+      : new Date(Math.ceil(now / 60000) * 60000);
 
     const [signal] = await sql`
       INSERT INTO signals (
-        signal_id, instrument, direction, signal_type, confidence,
-        confirming_strategies, entry_type, entry_price, valid_until,
-        stop_loss, take_profits, risk_reward, position_size_percent, meta, status
+        signal_id, start_time, instrument, direction, signal_type, confidence,
+        confirming_strategies, strike_price, expiration_seconds,
+        payout_percent, position_size_percent, martingale_step, meta, status
       ) VALUES (
-        ${signal_id}, ${data.instrument}, ${data.direction}, ${data.signal_type},
-        ${data.confidence}, ${JSON.stringify(data.confirming_strategies)},
-        ${data.entry.type}, ${data.entry.price}, ${data.entry.valid_until},
-        ${data.stop_loss}, ${JSON.stringify(data.take_profits)},
-        ${data.risk_reward}, ${data.position_size_percent},
+        ${signal_id}, ${startTime.toISOString()}, ${data.instrument}, ${data.direction},
+        ${data.signal_type}, ${data.confidence},
+        ${JSON.stringify(data.confirming_strategies)},
+        ${data.strike_price}, ${data.expiration_seconds},
+        ${data.payout_percent}, ${data.position_size_percent},
+        ${data.martingale_step || '0'},
         ${JSON.stringify(data.meta)}, 'active'
       )
       RETURNING *

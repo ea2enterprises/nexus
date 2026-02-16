@@ -11,18 +11,18 @@ interface JournalExportProps {
 export function JournalExport({ trades }: JournalExportProps) {
   const handleExportCSV = () => {
     const headers = [
-      'Date', 'Instrument', 'Direction', 'Entry', 'Exit',
-      'P&L ($)', 'P&L (pips)', 'P&L (%)', 'Martingale Step', 'Result', 'Notes'
+      'Date', 'Instrument', 'Direction', 'Strike Price', 'Duration (s)',
+      'Payout %', 'P&L ($)', 'P&L (%)', 'Martingale Step', 'Result', 'Notes'
     ];
 
     const rows = trades.map((t) => [
       t.entry_time,
       t.instrument,
       t.direction,
-      t.entry_price,
-      t.exit_price ?? '',
+      t.strike_price,
+      t.expiration_seconds,
+      t.payout_percent,
       t.pnl_usd ?? '',
-      t.pnl_pips ?? '',
       t.pnl_percent ?? '',
       t.martingale_step,
       t.result ?? '',

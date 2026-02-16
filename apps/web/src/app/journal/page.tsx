@@ -39,10 +39,7 @@ export default function JournalPage() {
         if (tradesRes.success) {
           let filtered = tradesRes.data;
           if (result) {
-            filtered = filtered.filter((t: Trade) =>
-              result === 'win' ? ['win', 'tp1', 'tp2'].includes(t.result || '') :
-              result === 'loss' ? ['loss', 'sl'].includes(t.result || '') : true
-            );
+            filtered = filtered.filter((t: Trade) => t.result === result);
           }
           setTrades(filtered);
         }

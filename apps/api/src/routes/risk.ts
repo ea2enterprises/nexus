@@ -138,35 +138,23 @@ export async function riskRoutes(app: FastifyInstance) {
 
     const g = RISK_GUARDRAILS;
     const baseRisk = values.base_risk_percent ?? g.base_risk_percent.default;
-    const steps = values.martingale_steps ?? g.martingale_steps.default;
-    const multiplier = values.martingale_multiplier ?? g.martingale_multiplier.default;
     const martingaleEnabled = values.martingale_enabled ?? true;
     const maxExposure = values.max_concurrent_exposure ?? g.max_concurrent_exposure.default;
+    const payoutPercent = 88; // current broker payout
 
-    // Calculate worst-case loss
+    // Calculate worst-case loss (strict 2-step: initial + 1 double-down)
     let totalLoss = 0;
     const stepBreakdown: { step: string; size_percent: number; loss_percent: number }[] = [];
 
+    const step0 = Math.min(baseRisk, maxExposure);
+    stepBreakdown.push({ step: 'Step 0', size_percent: step0, loss_percent: step0 });
+    totalLoss += step0;
+
     if (martingaleEnabled) {
-      let currentSize = baseRisk;
-      for (let i = 0; i <= steps; i++) {
-        const effectiveSize = Math.min(currentSize, maxExposure);
-        const stepName = i === 0 ? 'Base' : `Step ${i}`;
-        stepBreakdown.push({
-          step: stepName,
-          size_percent: effectiveSize,
-          loss_percent: effectiveSize,
-        });
-        totalLoss += effectiveSize;
-        currentSize *= multiplier;
-      }
-    } else {
-      stepBreakdown.push({
-        step: 'Base (no martingale)',
-        size_percent: baseRisk,
-        loss_percent: baseRisk,
-      });
-      totalLoss = baseRisk;
+      const doubleDown = baseRisk * (100 + payoutPercent) / payoutPercent;
+      const step1 = Math.min(doubleDown, maxExposure);
+      stepBreakdown.push({ step: 'Step 1', size_percent: step1, loss_percent: step1 });
+      totalLoss += step1;
     }
 
     return reply.send({
@@ -178,8 +166,6 @@ export async function riskRoutes(app: FastifyInstance) {
         settings_used: {
           base_risk_percent: baseRisk,
           martingale_enabled: martingaleEnabled,
-          martingale_steps: steps,
-          martingale_multiplier: multiplier,
           max_concurrent_exposure: maxExposure,
         },
       },

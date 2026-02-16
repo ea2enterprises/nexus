@@ -48,10 +48,6 @@ export class MockBroker implements BrokerAdapter {
         : request.entryPrice + movement;
     }
 
-    const pnlPips = request.direction === 'BUY'
-      ? (exitPrice - request.entryPrice) / pipSize
-      : (request.entryPrice - exitPrice) / pipSize;
-
     // Binary option P&L: win = stake * payout, loss = -stake
     const stake = (request.positionSize / 100) * this.balance;
     const pnl = isWin ? stake * payoutRate : -stake;
@@ -71,7 +67,6 @@ export class MockBroker implements BrokerAdapter {
       entryTime,
       exitTime,
       pnl: Math.round(pnl * 100) / 100,
-      pnlPips: Math.round(pnlPips * 10) / 10,
       pnlPercent: Math.round(pnlPercent * 100) / 100,
       isWin,
       payoutRate,
@@ -80,7 +75,6 @@ export class MockBroker implements BrokerAdapter {
 
   async closeTrade(tradeId: string): Promise<TradeResponse> {
     // For binary options, trades auto-close at expiry
-    // This simulates early close (not typically available)
     return {
       brokerId: tradeId,
       instrument: 'EUR/USD',
@@ -90,7 +84,6 @@ export class MockBroker implements BrokerAdapter {
       entryTime: new Date().toISOString(),
       exitTime: new Date().toISOString(),
       pnl: 0,
-      pnlPips: 0,
       pnlPercent: 0,
       isWin: false,
       payoutRate: 0,

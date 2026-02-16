@@ -2,68 +2,49 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
-import { apiPost } from '@/lib/api';
 import { AlertTriangle } from 'lucide-react';
 
 interface WorstCaseProps {
   baseRisk: number;
   martingaleEnabled: boolean;
-  martingaleSteps: number;
-  martingaleMultiplier: number;
   maxExposure: number;
+  payoutPercent?: number;
   accountBalance?: number;
 }
 
 interface WorstCaseResult {
   max_daily_loss_percent: number;
-  max_daily_loss_at_10k: number;
   step_breakdown: { step: string; size_percent: number; loss_percent: number }[];
 }
 
 export function WorstCaseCalc({
-  baseRisk, martingaleEnabled, martingaleSteps, martingaleMultiplier, maxExposure,
-  accountBalance = 10000
+  baseRisk, martingaleEnabled, maxExposure,
+  payoutPercent = 88, accountBalance = 10000
 }: WorstCaseProps) {
   const [result, setResult] = useState<WorstCaseResult | null>(null);
 
   useEffect(() => {
-    async function calculate() {
-      try {
-        const res = await apiPost('/risk/worst-case', {
-          base_risk_percent: baseRisk,
-          martingale_enabled: martingaleEnabled,
-          martingale_steps: martingaleSteps,
-          martingale_multiplier: martingaleMultiplier,
-          max_concurrent_exposure: maxExposure,
-        });
-        if (res.success) {
-          setResult(res.data);
-        }
-      } catch (err) {
-        // Calculate locally as fallback
-        let totalLoss = 0;
-        const steps: WorstCaseResult['step_breakdown'] = [];
-        if (martingaleEnabled) {
-          let size = baseRisk;
-          for (let i = 0; i <= martingaleSteps; i++) {
-            const effective = Math.min(size, maxExposure);
-            steps.push({ step: i === 0 ? 'Base' : `Step ${i}`, size_percent: effective, loss_percent: effective });
-            totalLoss += effective;
-            size *= martingaleMultiplier;
-          }
-        } else {
-          steps.push({ step: 'Base', size_percent: baseRisk, loss_percent: baseRisk });
-          totalLoss = baseRisk;
-        }
-        setResult({
-          max_daily_loss_percent: totalLoss,
-          max_daily_loss_at_10k: totalLoss * 100,
-          step_breakdown: steps,
-        });
-      }
+    let totalLoss = 0;
+    const steps: WorstCaseResult['step_breakdown'] = [];
+
+    // Step 0: base risk
+    const step0 = Math.min(baseRisk, maxExposure);
+    steps.push({ step: 'Step 0', size_percent: step0, loss_percent: step0 });
+    totalLoss += step0;
+
+    if (martingaleEnabled) {
+      // Step 1: payout-based double-down
+      const doubleDown = baseRisk * (100 + payoutPercent) / payoutPercent;
+      const step1 = Math.min(doubleDown, maxExposure);
+      steps.push({ step: 'Step 1', size_percent: step1, loss_percent: step1 });
+      totalLoss += step1;
     }
-    calculate();
-  }, [baseRisk, martingaleEnabled, martingaleSteps, martingaleMultiplier, maxExposure]);
+
+    setResult({
+      max_daily_loss_percent: totalLoss,
+      step_breakdown: steps,
+    });
+  }, [baseRisk, martingaleEnabled, maxExposure, payoutPercent]);
 
   if (!result) return null;
 

@@ -31,7 +31,6 @@ export interface RiskProfile {
   base_risk_percent: number;
   martingale_enabled: boolean;
   martingale_steps: number;
-  martingale_multiplier: number;
   daily_halt_losses: number;
   weekly_drawdown_limit: number;
   max_concurrent_exposure: number;
@@ -72,7 +71,7 @@ export interface RiskPreset {
 
 // ─── Signal Types ────────────────────────────────────────────
 export type SignalDirection = 'BUY' | 'SELL';
-export type SignalType = 'SCALP' | 'INTRADAY' | 'SWING' | 'POSITION';
+export type SignalType = 'TURBO' | 'SHORT';
 export type SignalStatus = 'active' | 'expired' | 'executed' | 'cancelled';
 
 export type StrategyId =
@@ -83,51 +82,55 @@ export type StrategyId =
   | 'FLOW-01'
   | 'SENT-01'
   | 'ML-01'
-  | 'SCALP-01';
-
-export interface TakeProfit {
-  level: string;
-  price: number;
-  close_percent: number;
-}
-
-export interface SignalEntry {
-  type: 'MARKET' | 'LIMIT';
-  price: number;
-  valid_until: string;
-}
+  | 'SCALP-01'
+  | 'LIQ-SWEEP'
+  | 'MSS'
+  | 'FVG'
+  | 'SMC-OB'
+  | 'EMA-TREND'
+  | 'VOLUME'
+  | 'KILLZONE';
 
 export interface SignalMeta {
   session: string;
-  key_level: string;
   volume_confirmation: boolean;
   news_clear: boolean;
   correlation_check: 'PASS' | 'FAIL';
   daily_losses_count: number;
   weekly_drawdown_percent: number;
+  // ICT confluence fields
+  killzone?: string;
+  sweep_type?: string;
+  fvg_high?: number;
+  fvg_low?: number;
+  mss_level?: number;
+  order_block_high?: number;
+  order_block_low?: number;
+  ema_trend?: string;
 }
 
 export interface Signal {
   id: string;
   signal_id: string;
   timestamp_utc: string;
+  start_time: string;
   instrument: string;
   direction: SignalDirection;
   signal_type: SignalType;
   confidence: number;
   confirming_strategies: StrategyId[];
-  entry: SignalEntry;
-  stop_loss: number;
-  take_profits: TakeProfit[];
-  risk_reward: number;
+  strike_price: number;
+  expiration_seconds: number;
+  payout_percent: number;
   position_size_percent: number;
+  martingale_step: MartingaleStep;
   meta: SignalMeta;
   status: SignalStatus;
 }
 
 // ─── Trade Types ─────────────────────────────────────────────
-export type MartingaleStep = 'base' | 'step1' | 'step2' | 'step3' | 'step4' | 'step5' | 'halted';
-export type TradeResult = 'tp1' | 'tp2' | 'sl' | 'manual_close' | 'breakeven' | 'kill_switch' | 'win' | 'loss';
+export type MartingaleStep = '0' | '1' | 'done';
+export type TradeResult = 'win' | 'loss' | 'tie' | 'cancelled';
 
 export interface Trade {
   id: string;
@@ -138,16 +141,15 @@ export interface Trade {
   instrument: string;
   direction: SignalDirection;
   martingale_step: MartingaleStep;
-  entry_price: number;
+  strike_price: number;
   entry_time: string;
-  exit_price?: number;
+  expiration_seconds: number;
   exit_time?: string;
+  exit_price?: number;
+  payout_percent: number;
   position_size_percent: number;
-  position_size_lots?: number;
-  pnl_pips?: number;
   pnl_usd?: number;
   pnl_percent?: number;
-  slippage_pips?: number;
   execution_latency_ms?: number;
   result?: TradeResult;
   user_notes?: string;

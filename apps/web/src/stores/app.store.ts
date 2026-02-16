@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import type { User, Signal, RiskProfile, MartingaleState, Trade } from '@nexus/shared';
 
+function normalizeSignal(s: any): Signal {
+  return {
+    ...s,
+    confirming_strategies: typeof s.confirming_strategies === 'string'
+      ? JSON.parse(s.confirming_strategies) : s.confirming_strategies,
+    meta: typeof s.meta === 'string' ? JSON.parse(s.meta) : s.meta,
+    start_time: s.start_time || s.timestamp_utc,
+  };
+}
+
 interface AppState {
   // Auth
   user: User | null;
@@ -28,6 +38,12 @@ interface AppState {
   recentTrades: Trade[];
   setRecentTrades: (trades: Trade[]) => void;
   addTrade: (trade: Trade) => void;
+
+  // Audio
+  isMuted: boolean;
+  audioReady: boolean;
+  toggleMute: () => void;
+  setAudioReady: (ready: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -57,9 +73,9 @@ export const useAppStore = create<AppState>((set) => ({
   // Signals
   signals: [],
   addSignal: (signal) => set((s) => ({
-    signals: [signal, ...s.signals].slice(0, 100),
+    signals: [normalizeSignal(signal), ...s.signals].slice(0, 100),
   })),
-  setSignals: (signals) => set({ signals }),
+  setSignals: (signals) => set({ signals: signals.map(normalizeSignal) }),
 
   // Risk
   riskProfile: null,
@@ -80,4 +96,14 @@ export const useAppStore = create<AppState>((set) => ({
   addTrade: (trade) => set((s) => ({
     recentTrades: [trade, ...s.recentTrades].slice(0, 50),
   })),
+
+  // Audio
+  isMuted: typeof window !== 'undefined' ? localStorage.getItem('nexus_muted') === 'true' : false,
+  audioReady: false,
+  toggleMute: () => set((s) => {
+    const next = !s.isMuted;
+    if (typeof window !== 'undefined') localStorage.setItem('nexus_muted', String(next));
+    return { isMuted: next };
+  }),
+  setAudioReady: (ready) => set({ audioReady: ready }),
 }));

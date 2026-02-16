@@ -1,7 +1,7 @@
 import { sql } from '../db/client.js';
 import { getSignalById, markSignalExecuted } from './signal.service.js';
 import { getActiveRiskProfile } from './risk.service.js';
-import { getMartingaleState, processTradeResult } from './martingale.service.js';
+import { getMartingaleState, processTradeResult, computeDoubleDownSize } from './martingale.service.js';
 import { MockBroker } from '../brokers/mock.broker.js';
 import crypto from 'crypto';
 
@@ -13,6 +13,12 @@ export async function executeSignalForUser(userId: string, signalId: string) {
   if (!signal) return { success: false, error: 'Signal not found' };
   if (signal.status !== 'active') return { success: false, error: 'Signal no longer active' };
 
+  // Block execution during PREPARE phase (before start_time)
+  const startTime = new Date(signal.start_time).getTime();
+  if (Date.now() < startTime) {
+    return { success: false, error: 'Signal not yet active. Wait for the candle to open.' };
+  }
+
   // 2. Get risk profile
   const riskProfile = await getActiveRiskProfile(userId);
   if (!riskProfile) return { success: false, error: 'No active risk profile' };
@@ -20,14 +26,19 @@ export async function executeSignalForUser(userId: string, signalId: string) {
   // 3. Check martingale state
   const martState = await getMartingaleState(userId, signal.instrument);
   if (!martState.canTrade) {
-    return { success: false, error: `Trading halted for ${signal.instrument} until daily reset` };
+    return { success: false, error: `Trading halted for ${signal.instrument} — both steps lost` };
   }
 
-  // 4. Calculate position size
-  let positionSize = Number(riskProfile.base_risk_percent);
-  if (riskProfile.martingale_enabled && martState.currentStep !== 'base') {
-    const stepNum = parseInt(martState.currentStep.replace('step', ''), 10) || 0;
-    positionSize = positionSize * Math.pow(Number(riskProfile.martingale_multiplier), stepNum);
+  // 4. Calculate position size (payout-based double-down)
+  const baseRisk = Number(riskProfile.base_risk_percent);
+  const payoutPercent = Number(signal.payout_percent);
+  let positionSize: number;
+
+  if (martState.currentStep === '0') {
+    positionSize = baseRisk;
+  } else {
+    // Step 1: size to recover step-0 loss + profit
+    positionSize = computeDoubleDownSize(baseRisk, payoutPercent);
   }
   // Cap at max exposure
   positionSize = Math.min(positionSize, Number(riskProfile.max_concurrent_exposure));
@@ -49,9 +60,9 @@ export async function executeSignalForUser(userId: string, signalId: string) {
   const brokerResult = await broker.placeTrade({
     instrument: signal.instrument,
     direction: signal.direction,
-    entryPrice: Number(signal.entry_price),
+    entryPrice: Number(signal.strike_price),
     positionSize,
-    duration: 60, // 1 minute binary default
+    duration: Number(signal.expiration_seconds),
   });
 
   const latency = Date.now() - executionStart;
@@ -61,14 +72,17 @@ export async function executeSignalForUser(userId: string, signalId: string) {
   const [trade] = await sql`
     INSERT INTO trades (
       trade_id, signal_id, user_id, instrument, direction,
-      martingale_step, entry_price, entry_time, exit_price, exit_time,
-      position_size_percent, pnl_pips, pnl_usd, pnl_percent,
+      martingale_step, strike_price, entry_time, expiration_seconds,
+      exit_price, exit_time, payout_percent,
+      position_size_percent, pnl_usd, pnl_percent,
       execution_latency_ms, result
     ) VALUES (
       ${tradeId}, ${signal.id}, ${userId}, ${signal.instrument}, ${signal.direction},
       ${martState.currentStep}, ${brokerResult.entryPrice}, ${brokerResult.entryTime},
+      ${Number(signal.expiration_seconds)},
       ${brokerResult.exitPrice}, ${brokerResult.exitTime},
-      ${positionSize}, ${brokerResult.pnlPips}, ${brokerResult.pnl},
+      ${payoutPercent},
+      ${positionSize}, ${brokerResult.pnl},
       ${brokerResult.pnlPercent}, ${latency},
       ${isWin ? 'win' : 'loss'}
     )
@@ -83,8 +97,6 @@ export async function executeSignalForUser(userId: string, signalId: string) {
     trade.id,
     {
       martingale_enabled: riskProfile.martingale_enabled,
-      martingale_steps: riskProfile.martingale_steps,
-      martingale_multiplier: Number(riskProfile.martingale_multiplier),
       daily_halt_losses: riskProfile.daily_halt_losses,
     }
   );

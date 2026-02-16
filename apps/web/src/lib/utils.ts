@@ -12,14 +12,22 @@ export function formatPercent(value: number): string {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-export function formatPips(value: number): string {
-  const sign = value >= 0 ? '+' : '';
-  return `${sign}${value.toFixed(1)} pips`;
+export function formatDuration(seconds: number): string {
+  if (seconds >= 60) return `${seconds / 60}m`;
+  return `${seconds}s`;
 }
 
-export function formatPrice(value: number, instrument: string): string {
+export function formatCountdown(ms: number): string {
+  if (ms <= 0) return '0:00';
+  const totalSec = Math.ceil(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
+}
+
+export function formatPrice(value: number | string, instrument: string): string {
   const decimals = instrument.includes('JPY') ? 3 : 5;
-  return value.toFixed(decimals);
+  return Number(value).toFixed(decimals);
 }
 
 export function formatTime(iso: string): string {
@@ -54,7 +62,7 @@ export function pnlColor(value: number): string {
 }
 
 export function martingaleColor(step: string): string {
-  if (step === 'base') return 'text-profit';
-  if (step === 'halted') return 'text-halt';
+  if (step === '0') return 'text-profit';
+  if (step === 'done') return 'text-halt';
   return 'text-caution';
 }

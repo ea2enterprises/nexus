@@ -1,7 +1,7 @@
 'use client';
 
 import { Badge } from '@/components/ui/Badge';
-import { FOREX_PAIRS } from '@nexus/shared';
+import { INSTRUMENTS } from '@nexus/shared';
 
 interface TradeFiltersProps {
   selectedInstrument: string | null;
@@ -13,7 +13,7 @@ interface TradeFiltersProps {
 export function TradeFilters({
   selectedInstrument, selectedResult, onInstrumentChange, onResultChange
 }: TradeFiltersProps) {
-  const instruments = ['All', ...FOREX_PAIRS];
+  const instruments = ['All', ...INSTRUMENTS];
   const results = ['All', 'win', 'loss'];
 
   return (

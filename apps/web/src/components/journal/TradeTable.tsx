@@ -1,7 +1,7 @@
 'use client';
 
 import { Badge } from '@/components/ui/Badge';
-import { formatCurrency, formatPips, formatPrice, formatDateTime, cn, pnlColor } from '@/lib/utils';
+import { formatCurrency, formatPrice, formatDateTime, formatDuration, cn, pnlColor } from '@/lib/utils';
 import { TableRowSkeleton } from '@/components/ui/Skeleton';
 import type { Trade } from '@nexus/shared';
 
@@ -19,10 +19,10 @@ export function TradeTable({ trades, loading }: TradeTableProps) {
             <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Date</th>
             <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Instrument</th>
             <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Dir</th>
-            <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Entry</th>
-            <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Exit</th>
+            <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Strike</th>
+            <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Duration</th>
+            <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Payout</th>
             <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">P&L</th>
-            <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Pips</th>
             <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Step</th>
             <th className="px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Result</th>
           </tr>
@@ -46,29 +46,29 @@ export function TradeTable({ trades, loading }: TradeTableProps) {
                 <Badge variant={trade.direction === 'BUY' ? 'profit' : 'loss'}>{trade.direction}</Badge>
               </td>
               <td className="px-4 py-3 font-mono text-text-primary-dark tabular-nums">
-                {formatPrice(trade.entry_price, trade.instrument)}
+                {formatPrice(trade.strike_price, trade.instrument)}
               </td>
-              <td className="px-4 py-3 font-mono text-text-primary-dark tabular-nums">
-                {trade.exit_price ? formatPrice(trade.exit_price, trade.instrument) : '—'}
+              <td className="px-4 py-3 font-mono text-text-secondary tabular-nums">
+                {formatDuration(trade.expiration_seconds)}
+              </td>
+              <td className="px-4 py-3 font-mono text-profit tabular-nums">
+                {trade.payout_percent}%
               </td>
               <td className={cn('px-4 py-3 font-mono font-medium tabular-nums', pnlColor(trade.pnl_usd ?? 0))}>
                 {trade.pnl_usd != null ? formatCurrency(trade.pnl_usd) : '—'}
               </td>
-              <td className={cn('px-4 py-3 font-mono tabular-nums', pnlColor(trade.pnl_pips ?? 0))}>
-                {trade.pnl_pips != null ? formatPips(trade.pnl_pips) : '—'}
-              </td>
               <td className="px-4 py-3">
                 <Badge variant={
-                  trade.martingale_step === 'base' ? 'default' :
-                  trade.martingale_step === 'halted' ? 'halt' : 'caution'
+                  trade.martingale_step === '0' ? 'default' :
+                  trade.martingale_step === 'done' ? 'halt' : 'caution'
                 }>
-                  {trade.martingale_step}
+                  {trade.martingale_step === 'done' ? 'DONE' : `STEP ${trade.martingale_step}`}
                 </Badge>
               </td>
               <td className="px-4 py-3">
                 <Badge variant={
-                  trade.result === 'win' || trade.result === 'tp1' || trade.result === 'tp2' ? 'profit' :
-                  trade.result === 'loss' || trade.result === 'sl' ? 'loss' : 'default'
+                  trade.result === 'win' ? 'profit' :
+                  trade.result === 'loss' ? 'loss' : 'default'
                 }>
                   {trade.result || 'open'}
                 </Badge>

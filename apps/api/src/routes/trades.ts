@@ -51,8 +51,8 @@ export async function tradeRoutes(app: FastifyInstance) {
     const [stats] = await sql`
       SELECT
         COUNT(*) as total_trades,
-        COUNT(*) FILTER (WHERE result IN ('tp1', 'tp2', 'win')) as wins,
-        COUNT(*) FILTER (WHERE result IN ('sl', 'loss')) as losses,
+        COUNT(*) FILTER (WHERE result = 'win') as wins,
+        COUNT(*) FILTER (WHERE result = 'loss') as losses,
         COALESCE(SUM(pnl_usd), 0) as total_pnl,
         COALESCE(AVG(pnl_percent), 0) as avg_pnl_percent,
         COALESCE(MAX(pnl_usd), 0) as best_trade,

@@ -5,41 +5,44 @@ import { Shield } from 'lucide-react';
 
 interface MartingaleWidgetProps {
   step: string;
-  maxSteps: number;
   baseRisk: number;
-  multiplier: number;
+  payoutPercent: number;
 }
 
-export function MartingaleWidget({ step, maxSteps, baseRisk, multiplier }: MartingaleWidgetProps) {
-  const stepNum = step === 'base' ? 0 : step === 'halted' ? maxSteps + 1 : parseInt(step.replace('step', ''), 10) || 0;
-  const isHalted = step === 'halted';
-  const currentSize = isHalted ? 0 : baseRisk * Math.pow(multiplier, stepNum);
-
-  const dots = Array.from({ length: maxSteps + 1 }, (_, i) => i <= stepNum);
+export function MartingaleWidget({ step, baseRisk, payoutPercent }: MartingaleWidgetProps) {
+  const isDone = step === 'done';
+  const isStep1 = step === '1';
+  const doubleDownSize = baseRisk * (100 + payoutPercent) / payoutPercent;
 
   return (
     <div className={cn(
       'flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs',
-      isHalted
+      isDone
         ? 'border-halt/50 bg-loss-bg'
-        : step === 'base'
-          ? 'border-profit/30 bg-profit-bg'
-          : 'border-caution/50 bg-caution-bg'
+        : isStep1
+          ? 'border-caution/50 bg-caution-bg'
+          : 'border-profit/30 bg-profit-bg'
     )}>
       <Shield size={14} className={martingaleColor(step)} />
-      <div className="flex gap-0.5">
-        {dots.map((active, i) => (
-          <div
-            key={i}
-            className={cn(
-              'w-2 h-2 rounded-full',
-              active ? (isHalted ? 'bg-halt' : i === 0 ? 'bg-profit' : 'bg-caution') : 'bg-border-dark'
-            )}
-          />
-        ))}
+      <div className="flex gap-1">
+        {/* Step 0 dot */}
+        <div className={cn(
+          'w-2 h-2 rounded-full',
+          isDone ? 'bg-halt' : 'bg-profit'
+        )} />
+        {/* Step 1 dot */}
+        <div className={cn(
+          'w-2 h-2 rounded-full',
+          isDone ? 'bg-halt' : isStep1 ? 'bg-caution' : 'bg-border-dark'
+        )} />
       </div>
       <span className={cn('font-mono font-medium uppercase', martingaleColor(step))}>
-        {isHalted ? 'HALTED' : step === 'base' ? `BASE ${baseRisk}%` : `${step.toUpperCase()} ${currentSize.toFixed(0)}%`}
+        {isDone
+          ? 'DONE'
+          : isStep1
+            ? `STEP 1 · ${doubleDownSize.toFixed(1)}%`
+            : `STEP 0 · ${baseRisk}%`
+        }
       </span>
     </div>
   );

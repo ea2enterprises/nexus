@@ -64,8 +64,6 @@ export default function RiskSettingsPage() {
       <WorstCaseCalc
         baseRisk={Number(localProfile.base_risk_percent)}
         martingaleEnabled={localProfile.martingale_enabled}
-        martingaleSteps={localProfile.martingale_steps}
-        martingaleMultiplier={Number(localProfile.martingale_multiplier)}
         maxExposure={Number(localProfile.max_concurrent_exposure)}
       />
 

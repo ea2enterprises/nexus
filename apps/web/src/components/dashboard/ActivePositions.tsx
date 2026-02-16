@@ -3,7 +3,7 @@
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { formatCurrency, formatPips, formatPrice, cn, pnlColor } from '@/lib/utils';
+import { formatCurrency, formatPrice, formatDuration, cn, pnlColor } from '@/lib/utils';
 import type { Trade } from '@nexus/shared';
 
 interface ActivePositionsProps {
@@ -33,7 +33,6 @@ export function ActivePositions({ positions, onClose }: ActivePositionsProps) {
       <div className="space-y-2">
         {positions.map((pos) => {
           const pnl = pos.pnl_usd ?? 0;
-          const pips = pos.pnl_pips ?? 0;
           return (
             <div
               key={pos.id}
@@ -46,7 +45,7 @@ export function ActivePositions({ positions, onClose }: ActivePositionsProps) {
                 <div>
                   <p className="text-sm font-medium text-text-primary-dark">{pos.instrument}</p>
                   <p className="text-xs font-mono text-text-secondary">
-                    {formatPrice(pos.entry_price, pos.instrument)}
+                    {formatPrice(pos.strike_price, pos.instrument)} · {formatDuration(pos.expiration_seconds)}
                   </p>
                 </div>
               </div>
@@ -55,8 +54,8 @@ export function ActivePositions({ positions, onClose }: ActivePositionsProps) {
                   <p className={cn('text-sm font-mono font-medium tabular-nums', pnlColor(pnl))}>
                     {formatCurrency(pnl)}
                   </p>
-                  <p className={cn('text-xs font-mono tabular-nums', pnlColor(pips))}>
-                    {formatPips(pips)}
+                  <p className="text-xs font-mono text-text-secondary tabular-nums">
+                    {pos.payout_percent}% payout
                   </p>
                 </div>
                 {onClose && (

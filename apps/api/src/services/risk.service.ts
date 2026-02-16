@@ -29,30 +29,23 @@ export async function applyPendingChanges() {
   return profiles.length;
 }
 
-export function calculateWorstCase(profile: Partial<RiskProfile>) {
+export function calculateWorstCase(profile: Partial<RiskProfile>, payoutPercent = 88) {
   const baseRisk = profile.base_risk_percent ?? 5;
-  const steps = profile.martingale_steps ?? 2;
-  const multiplier = profile.martingale_multiplier ?? 2;
   const martingaleEnabled = profile.martingale_enabled ?? true;
   const maxExposure = profile.max_concurrent_exposure ?? 20;
 
   let totalLoss = 0;
   const breakdown: { step: string; size: number }[] = [];
 
+  const step0 = Math.min(baseRisk, maxExposure);
+  breakdown.push({ step: 'Step 0', size: step0 });
+  totalLoss += step0;
+
   if (martingaleEnabled) {
-    let size = baseRisk;
-    for (let i = 0; i <= steps; i++) {
-      const effectiveSize = Math.min(size, maxExposure);
-      breakdown.push({
-        step: i === 0 ? 'Base' : `Step ${i}`,
-        size: effectiveSize,
-      });
-      totalLoss += effectiveSize;
-      size *= multiplier;
-    }
-  } else {
-    breakdown.push({ step: 'Base', size: baseRisk });
-    totalLoss = baseRisk;
+    const doubleDown = baseRisk * (100 + payoutPercent) / payoutPercent;
+    const step1 = Math.min(doubleDown, maxExposure);
+    breakdown.push({ step: 'Step 1', size: step1 });
+    totalLoss += step1;
   }
 
   return { totalLoss, breakdown };

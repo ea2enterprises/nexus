@@ -1,10 +1,21 @@
+import math
 import random
-from datetime import datetime, timedelta, timezone
-from models.signal import Signal, SignalEntry, TakeProfit, SignalMeta
+from datetime import datetime, timezone
+from models.signal import Signal, SignalMeta
 
 INSTRUMENTS = [
-    "EUR/USD", "GBP/USD", "USD/JPY", "EUR/GBP",
-    "AUD/USD", "USD/CHF", "USD/CAD", "NZD/USD",
+    # Majors
+    "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CHF", "USD/CAD",
+    # EUR crosses
+    "EUR/GBP", "EUR/JPY", "EUR/AUD", "EUR/CAD", "EUR/CHF",
+    # GBP crosses
+    "GBP/JPY", "GBP/CAD", "GBP/CHF",
+    # AUD crosses
+    "AUD/JPY", "AUD/CHF", "AUD/CAD",
+    # CAD crosses
+    "CAD/CHF", "CAD/JPY",
+    # CHF crosses
+    "CHF/JPY",
 ]
 
 STRATEGIES = [
@@ -12,60 +23,58 @@ STRATEGIES = [
     "FLOW-01", "SENT-01", "ML-01", "SCALP-01",
 ]
 
-SIGNAL_TYPES = ["SCALP", "INTRADAY", "SWING"]
-
 SESSIONS = ["Tokyo", "London", "New York", "Sydney"]
 
-# Approximate current prices for realistic signals
+# All signal types use a fixed 60-second binary option duration
+EXPIRATION_SECONDS = 60
+PAYOUT_PERCENT = 88.0
+
+# Approximate current prices for realistic strike prices
 BASE_PRICES = {
-    "EUR/USD": 1.0825,
-    "GBP/USD": 1.2610,
-    "USD/JPY": 152.50,
-    "EUR/GBP": 0.8585,
-    "AUD/USD": 0.6450,
-    "USD/CHF": 0.8950,
-    "USD/CAD": 1.3580,
-    "NZD/USD": 0.5950,
+    # Majors
+    "EUR/USD": 1.0825, "GBP/USD": 1.2610, "USD/JPY": 152.50,
+    "AUD/USD": 0.6450, "USD/CHF": 0.8950, "USD/CAD": 1.3580,
+    # EUR crosses
+    "EUR/GBP": 0.8585, "EUR/JPY": 165.10, "EUR/AUD": 1.6780,
+    "EUR/CAD": 1.4700, "EUR/CHF": 0.9690,
+    # GBP crosses
+    "GBP/JPY": 192.30, "GBP/CAD": 1.7120, "GBP/CHF": 1.1290,
+    # AUD crosses
+    "AUD/JPY": 98.40, "AUD/CHF": 0.5770, "AUD/CAD": 0.8760,
+    # CAD crosses
+    "CAD/CHF": 0.6590, "CAD/JPY": 112.30,
+    # CHF crosses
+    "CHF/JPY": 170.40,
 }
 
 
 def generate_mock_signal() -> Signal:
     instrument = random.choice(INSTRUMENTS)
     direction = random.choice(["BUY", "SELL"])
-    signal_type = random.choice(SIGNAL_TYPES)
+    signal_type = random.choice(["TURBO", "SHORT"])
     confidence = random.randint(60, 95)
 
     # Pick 3-4 confirming strategies (3-confirmation rule)
     num_strategies = random.randint(3, 4)
     confirming = random.sample(STRATEGIES, num_strategies)
 
-    # Generate realistic prices
+    # Generate realistic strike price from base price with small offset
     base_price = BASE_PRICES.get(instrument, 1.0)
     is_jpy = "JPY" in instrument
-    pip_size = 0.01 if is_jpy else 0.0001
-    spread = random.uniform(1, 3) * pip_size
+    tick_size = 0.01 if is_jpy else 0.0001
+    price_offset = random.uniform(-50, 50) * tick_size
+    strike_price = round(base_price + price_offset, 3 if is_jpy else 5)
 
-    # Add some randomness to base price
-    price_offset = random.uniform(-50, 50) * pip_size
-    current_price = round(base_price + price_offset, 5 if not is_jpy else 3)
-
-    # Calculate SL and TP
-    sl_pips = random.uniform(10, 25)
-    rr_ratio = random.uniform(1.5, 3.0)
-
-    if direction == "BUY":
-        entry_price = current_price
-        stop_loss = round(entry_price - sl_pips * pip_size, 5 if not is_jpy else 3)
-        tp1_price = round(entry_price + sl_pips * pip_size * (rr_ratio * 0.5), 5 if not is_jpy else 3)
-        tp2_price = round(entry_price + sl_pips * pip_size * rr_ratio, 5 if not is_jpy else 3)
-    else:
-        entry_price = current_price
-        stop_loss = round(entry_price + sl_pips * pip_size, 5 if not is_jpy else 3)
-        tp1_price = round(entry_price - sl_pips * pip_size * (rr_ratio * 0.5), 5 if not is_jpy else 3)
-        tp2_price = round(entry_price - sl_pips * pip_size * rr_ratio, 5 if not is_jpy else 3)
+    expiration_seconds = EXPIRATION_SECONDS
+    payout_percent = PAYOUT_PERCENT
 
     now = datetime.now(timezone.utc)
-    valid_until = now + timedelta(minutes=random.randint(5, 30))
+
+    # Compute start_time as the top of the next minute
+    epoch_seconds = now.timestamp()
+    next_minute = math.ceil(epoch_seconds / 60) * 60
+    start_time_dt = datetime.fromtimestamp(next_minute, tz=timezone.utc)
+    start_time_iso = start_time_dt.isoformat()
 
     # Determine current session
     hour = now.hour
@@ -84,28 +93,13 @@ def generate_mock_signal() -> Signal:
         signal_type=signal_type,
         confidence=confidence,
         confirming_strategies=confirming,
-        entry=SignalEntry(
-            type=random.choice(["MARKET", "LIMIT"]),
-            price=entry_price,
-            valid_until=valid_until.isoformat(),
-        ),
-        stop_loss=stop_loss,
-        take_profits=[
-            TakeProfit(level="TP1", price=tp1_price, close_percent=50),
-            TakeProfit(level="TP2", price=tp2_price, close_percent=50),
-        ],
-        risk_reward=round(rr_ratio, 1),
+        strike_price=strike_price,
+        expiration_seconds=expiration_seconds,
+        payout_percent=payout_percent,
         position_size_percent=5.0,
+        start_time=start_time_iso,
         meta=SignalMeta(
             session=session,
-            key_level=random.choice([
-                "4H order block rejection",
-                "Daily FVG fill",
-                "Weekly support bounce",
-                "London session high sweep",
-                "Previous day high liquidity grab",
-                "1H demand zone test",
-            ]),
             volume_confirmation=random.random() > 0.2,
             news_clear=random.random() > 0.1,
             correlation_check="PASS" if random.random() > 0.15 else "FAIL",

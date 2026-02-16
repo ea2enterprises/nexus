@@ -20,7 +20,6 @@ export function RiskConfigurator({ profile, onUpdate }: RiskConfiguratorProps) {
     base_risk_percent: Number(profile.base_risk_percent),
     martingale_enabled: profile.martingale_enabled,
     martingale_steps: profile.martingale_steps,
-    martingale_multiplier: Number(profile.martingale_multiplier),
     daily_halt_losses: profile.daily_halt_losses,
     weekly_drawdown_limit: Number(profile.weekly_drawdown_limit),
     max_concurrent_exposure: Number(profile.max_concurrent_exposure),
@@ -128,24 +127,10 @@ export function RiskConfigurator({ profile, onUpdate }: RiskConfiguratorProps) {
         </CardHeader>
         {values.martingale_enabled && (
           <div className="space-y-4">
-            <Slider
-              label="Martingale Steps"
-              value={values.martingale_steps}
-              onChange={(v) => setValues({ ...values, martingale_steps: v })}
-              min={g.martingale_steps.min}
-              max={g.martingale_steps.max}
-              step={1}
-              unit=""
-            />
-            <Slider
-              label="Multiplier"
-              value={values.martingale_multiplier}
-              onChange={(v) => setValues({ ...values, martingale_multiplier: v })}
-              min={g.martingale_multiplier.min}
-              max={g.martingale_multiplier.max}
-              step={0.5}
-              unit="x"
-            />
+            <div className="text-sm text-text-secondary">
+              Strict 2-step recovery: Initial trade + 1 double-down.
+              Double-down size is computed from broker payout to ensure break-even + profit.
+            </div>
             <Slider
               label="Daily Halt After Losses"
               value={values.daily_halt_losses}

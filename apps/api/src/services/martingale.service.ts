@@ -1,10 +1,9 @@
 import { sql } from '../db/client.js';
 
-export type MartingaleStep = 'base' | 'step1' | 'step2' | 'step3' | 'step4' | 'step5' | 'halted';
+export type MartingaleStep = '0' | '1' | 'done';
 
 interface MartingaleResult {
   currentStep: MartingaleStep;
-  positionSizeMultiplier: number;
   canTrade: boolean;
   consecutiveLosses: number;
 }
@@ -15,16 +14,24 @@ export async function getMartingaleState(userId: string, instrument: string): Pr
   `;
 
   if (states.length === 0) {
-    return { currentStep: 'base', positionSizeMultiplier: 1, canTrade: true, consecutiveLosses: 0 };
+    return { currentStep: '0', canTrade: true, consecutiveLosses: 0 };
   }
 
   const state = states[0];
   return {
     currentStep: state.current_step as MartingaleStep,
-    positionSizeMultiplier: getMultiplierForStep(state.current_step),
-    canTrade: state.current_step !== 'halted',
+    canTrade: state.current_step !== 'done',
     consecutiveLosses: state.consecutive_losses,
   };
+}
+
+/**
+ * Compute the double-down position size for step 1.
+ * Formula: baseRisk × (100 + payoutPercent) / payoutPercent
+ * This ensures a step-1 win recovers the step-0 loss AND produces profit.
+ */
+export function computeDoubleDownSize(baseRisk: number, payoutPercent: number): number {
+  return baseRisk * (100 + payoutPercent) / payoutPercent;
 }
 
 export async function processTradeResult(
@@ -32,7 +39,7 @@ export async function processTradeResult(
   instrument: string,
   isWin: boolean,
   tradeId: string,
-  riskProfile: { martingale_enabled: boolean; martingale_steps: number; martingale_multiplier: number; daily_halt_losses: number }
+  riskProfile: { martingale_enabled: boolean; daily_halt_losses: number }
 ) {
   // Get or create state
   let states = await sql`
@@ -42,7 +49,7 @@ export async function processTradeResult(
   if (states.length === 0) {
     await sql`
       INSERT INTO martingale_states (user_id, instrument, current_step, consecutive_losses)
-      VALUES (${userId}, ${instrument}, 'base', 0)
+      VALUES (${userId}, ${instrument}, '0', 0)
     `;
     states = await sql`
       SELECT * FROM martingale_states WHERE user_id = ${userId} AND instrument = ${instrument}
@@ -52,85 +59,70 @@ export async function processTradeResult(
   const state = states[0];
 
   if (isWin) {
-    // Win resets to base
+    // Win resets to step 0
     await sql`
       UPDATE martingale_states
-      SET current_step = 'base', consecutive_losses = 0, updated_at = NOW()
+      SET current_step = '0', consecutive_losses = 0, updated_at = NOW()
       WHERE id = ${state.id}
     `;
-    return { newStep: 'base' as MartingaleStep, halted: false };
+    return { newStep: '0' as MartingaleStep, halted: false };
   }
 
-  // Loss — advance martingale
+  // Loss
+  const newLosses = state.consecutive_losses + 1;
+
   if (!riskProfile.martingale_enabled) {
-    // No martingale, check halt condition
-    const newLosses = state.consecutive_losses + 1;
+    // No martingale — check halt threshold
     if (newLosses >= riskProfile.daily_halt_losses) {
       await sql`
         UPDATE martingale_states
-        SET current_step = 'halted', consecutive_losses = ${newLosses},
+        SET current_step = 'done', consecutive_losses = ${newLosses},
             last_loss_trade_id = ${tradeId}, halted_at = NOW(), updated_at = NOW()
         WHERE id = ${state.id}
       `;
-      return { newStep: 'halted' as MartingaleStep, halted: true };
+      return { newStep: 'done' as MartingaleStep, halted: true };
     }
     await sql`
       UPDATE martingale_states
       SET consecutive_losses = ${newLosses}, last_loss_trade_id = ${tradeId}, updated_at = NOW()
       WHERE id = ${state.id}
     `;
-    return { newStep: 'base' as MartingaleStep, halted: false };
+    return { newStep: '0' as MartingaleStep, halted: false };
   }
 
-  // Martingale enabled
-  const newLosses = state.consecutive_losses + 1;
-  const currentStepNum = getStepNumber(state.current_step);
-  const nextStepNum = currentStepNum + 1;
-
-  if (nextStepNum > riskProfile.martingale_steps) {
-    // Reached final step — HALT
+  // Martingale enabled — strict 2-step: 0 → 1 → done
+  if (state.current_step === '0') {
+    // Loss at step 0 → advance to step 1
     await sql`
       UPDATE martingale_states
-      SET current_step = 'halted', consecutive_losses = ${newLosses},
-          last_loss_trade_id = ${tradeId}, halted_at = NOW(), updated_at = NOW()
+      SET current_step = '1', consecutive_losses = ${newLosses},
+          last_loss_trade_id = ${tradeId}, updated_at = NOW()
       WHERE id = ${state.id}
     `;
-    return { newStep: 'halted' as MartingaleStep, halted: true };
+    return { newStep: '1' as MartingaleStep, halted: false };
   }
 
-  const nextStep = `step${nextStepNum}` as MartingaleStep;
+  // Loss at step 1 → done (signal dead)
   await sql`
     UPDATE martingale_states
-    SET current_step = ${nextStep}, consecutive_losses = ${newLosses},
-        last_loss_trade_id = ${tradeId}, updated_at = NOW()
+    SET current_step = 'done', consecutive_losses = ${newLosses},
+        last_loss_trade_id = ${tradeId}, halted_at = NOW(), updated_at = NOW()
     WHERE id = ${state.id}
   `;
-
-  return { newStep: nextStep, halted: false };
+  return { newStep: 'done' as MartingaleStep, halted: true };
 }
 
 export async function resetAllMartingaleStates() {
   await sql`
     UPDATE martingale_states
-    SET current_step = 'base', consecutive_losses = 0, halted_at = NULL, reset_at = NOW(), updated_at = NOW()
+    SET current_step = '0', consecutive_losses = 0, halted_at = NULL, reset_at = NOW(), updated_at = NOW()
   `;
 }
 
 export async function resetUserMartingaleStates(userId: string) {
   await sql`
     UPDATE martingale_states
-    SET current_step = 'base', consecutive_losses = 0, halted_at = NULL, reset_at = NOW(), updated_at = NOW()
+    SET current_step = '0', consecutive_losses = 0, halted_at = NULL, reset_at = NOW(), updated_at = NOW()
     WHERE user_id = ${userId}
   `;
-}
-
-function getStepNumber(step: string): number {
-  if (step === 'base') return 0;
-  const match = step.match(/step(\d+)/);
-  return match ? parseInt(match[1], 10) : 0;
-}
-
-function getMultiplierForStep(step: string): number {
-  const n = getStepNumber(step);
-  return Math.pow(2, n); // default 2x multiplier per step
 }

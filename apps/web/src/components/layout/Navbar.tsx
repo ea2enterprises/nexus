@@ -3,15 +3,20 @@
 import Link from 'next/link';
 import { useAppStore } from '@/stores/app.store';
 import { MartingaleWidget } from '@/components/risk/MartingaleWidget';
-import { Bell, LogOut, Settings, User } from 'lucide-react';
-import { useState } from 'react';
+import { GlobalClock } from './GlobalClock';
+import { resumeAudioContext } from '@/hooks/use-trade-audio';
+import { Bell, LogOut, Settings, User, Volume2, VolumeX } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 export function Navbar() {
-  const { user, isAuthenticated, logout, martingaleStates, riskProfile } = useAppStore();
+  const { user, isAuthenticated, logout, martingaleStates, riskProfile, isMuted, audioReady, toggleMute } = useAppStore();
   const [showMenu, setShowMenu] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Find the most important martingale state (non-base)
-  const activeState = martingaleStates.find(ms => ms.current_step !== 'base') || martingaleStates[0];
+  const activeState = martingaleStates.find(ms => ms.current_step !== '0') || martingaleStates[0];
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 h-14 bg-surface-dark/95 backdrop-blur-sm border-b border-border-dark">
@@ -24,22 +29,42 @@ export function Navbar() {
           <span className="text-lg font-bold text-text-primary-dark hidden sm:block">NEXUS</span>
         </Link>
 
-        {/* Center: Martingale Widget */}
-        {isAuthenticated && activeState && riskProfile && (
-          <div className="hidden md:block">
-            <MartingaleWidget
-              step={activeState.current_step}
-              maxSteps={riskProfile.martingale_steps}
-              baseRisk={Number(riskProfile.base_risk_percent)}
-              multiplier={Number(riskProfile.martingale_multiplier)}
-            />
-          </div>
-        )}
+        {/* Center: Clock + Martingale */}
+        <div className="flex items-center gap-4">
+          {mounted && <GlobalClock />}
+          {mounted && isAuthenticated && activeState && riskProfile && (
+            <div className="hidden md:block">
+              <MartingaleWidget
+                step={activeState.current_step}
+                baseRisk={Number(riskProfile.base_risk_percent)}
+                payoutPercent={88}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-3">
-          {isAuthenticated ? (
+        <div className="flex items-center gap-2">
+          {mounted && isAuthenticated ? (
             <>
+              <button
+                onClick={async () => {
+                  await resumeAudioContext();
+                  if (!audioReady) return;
+                  toggleMute();
+                }}
+                className={`relative p-2 rounded-lg hover:bg-navy transition-colors ${
+                  isMuted || !audioReady ? 'text-loss' : 'text-profit'
+                }`}
+                title={
+                  !audioReady ? 'Click to enable sounds' : isMuted ? 'Unmute sounds' : 'Mute sounds'
+                }
+              >
+                {isMuted || !audioReady ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                {!audioReady && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-caution rounded-full animate-pulse" />
+                )}
+              </button>
               <button className="p-2 rounded-lg hover:bg-navy text-text-secondary hover:text-text-primary-dark transition-colors">
                 <Bell size={18} />
               </button>
