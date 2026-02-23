@@ -106,18 +106,21 @@ export async function signalRoutes(app: FastifyInstance) {
 
     // Strict candle alignment: start_time MUST land on :00 seconds.
     // If provided, snap to nearest minute boundary. Otherwise default to top of next minute.
+    // Guarantee at least 10s of prep time so signals aren't born expired on the dashboard.
     const now = Date.now();
     let startMs: number;
     if (data.start_time) {
       const provided = new Date(data.start_time).getTime();
-      // Snap to the nearest minute boundary (round up to next :00)
       startMs = Math.ceil(provided / 60000) * 60000;
     } else {
       startMs = Math.ceil(now / 60000) * 60000;
     }
-    // Safety: if start_time is in the past, push to next minute
-    if (startMs <= now) {
-      startMs = Math.ceil(now / 60000) * 60000;
+    // Safety: ensure start_time is at least 10s in the future
+    if (startMs - now < 10000) {
+      startMs = (Math.floor(now / 60000) + 1) * 60000;
+      if (startMs - now < 10000) {
+        startMs += 60000;
+      }
     }
     const startTime = new Date(startMs);
 

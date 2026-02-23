@@ -72,10 +72,27 @@ export const useAppStore = create<AppState>((set) => ({
 
   // Signals
   signals: [],
-  addSignal: (signal) => set((s) => ({
-    signals: [normalizeSignal(signal), ...s.signals].slice(0, 100),
-  })),
-  setSignals: (signals) => set({ signals: signals.map(normalizeSignal) }),
+  addSignal: (signal) => set((s) => {
+    const normalized = normalizeSignal(signal);
+    const exists = s.signals.some(sig => sig.id === normalized.id);
+    if (exists) {
+      return { signals: s.signals.map(sig => sig.id === normalized.id ? normalized : sig) };
+    }
+    return { signals: [normalized, ...s.signals].slice(0, 100) };
+  }),
+  setSignals: (signals) => set((s) => {
+    const incoming = signals.map(normalizeSignal);
+    const incomingIds = new Set(incoming.map(sig => sig.id));
+    // Preserve signals still within their candle window (active being tracked, or executed)
+    const now = Date.now();
+    const preserved = s.signals.filter(sig => {
+      if (incomingIds.has(sig.id)) return false; // incoming replaces it
+      if (sig.status !== 'executed' && sig.status !== 'active') return false;
+      const expiry = new Date(sig.start_time).getTime() + sig.expiration_seconds * 1000;
+      return now < expiry; // still within candle
+    });
+    return { signals: [...incoming, ...preserved].slice(0, 100) };
+  }),
 
   // Risk
   riskProfile: null,

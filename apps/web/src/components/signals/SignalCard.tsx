@@ -11,7 +11,7 @@ import { formatPrice, formatDuration, cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app.store';
 import { useTradeAudio } from '@/hooks/use-trade-audio';
 import { useWallClockSeconds } from '@/hooks/useWallClockSeconds';
-import { ArrowUpRight, ArrowDownRight, Clock, Copy, Check } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Clock, Copy, Check, Radio } from 'lucide-react';
 import type { Signal } from '@nexus/shared';
 
 interface SignalCardProps {
@@ -23,6 +23,7 @@ interface SignalCardProps {
 export function SignalCard({ signal, onExecute, onViewDetail }: SignalCardProps) {
   const { riskProfile } = useAppStore();
   const [copied, setCopied] = useState(false);
+  const [isTracking, setIsTracking] = useState(signal.status === 'executed');
   const now = useWallClockSeconds();
   const { playTick, playChime } = useTradeAudio();
   const lastTickSecRef = useRef(-1);
@@ -44,6 +45,26 @@ export function SignalCard({ signal, onExecute, onViewDetail }: SignalCardProps)
   const isPreparing = timeToStart > 0;
   const isFinal5 = isPreparing && timeToStart <= 5000;
   const isLive = !isPreparing && now < expiresAt;
+  const timeIntoLive = now - startTime;
+  const isGracePeriod = isLive && timeIntoLive <= 15000;
+  const isWindowClosed = isLive && timeIntoLive > 15000;
+
+  // Sync tracking state when backend confirms execution
+  useEffect(() => {
+    if (signal.status === 'executed') setIsTracking(true);
+  }, [signal.status]);
+
+  // Derived: is this card in live tracking mode? (tracking + past start time + before expiry)
+  const isLiveTracking = isTracking && !isPreparing && now < expiresAt;
+  const candleRemaining = Math.max(0, expiresAt - now);
+  const candleFraction = signal.expiration_seconds * 1000 > 0
+    ? candleRemaining / (signal.expiration_seconds * 1000)
+    : 0;
+
+  // A signal is truly "expired" only if past the grace window AND not being tracked
+  const isExpired = !isPreparing && !isLive && !isTracking;
+  // Candle fully resolved (tracking complete)
+  const isResolved = isTracking && now >= expiresAt;
 
   // Audio triggers
   useEffect(() => {
@@ -66,18 +87,21 @@ export function SignalCard({ signal, onExecute, onViewDetail }: SignalCardProps)
   }, [now, signal.status, isFinal5, isLive, timeToStart, playTick, playChime]);
 
   // Compute background class based on phase
-  const phaseClass = signal.status === 'active'
-    ? isPreparing && !isFinal5
-      ? 'animate-pulse-prepare'
-      : isFinal5 && isBuy
-        ? 'animate-flash-buy'
-        : isFinal5 && !isBuy
-          ? 'animate-flash-sell'
-          : isLive && isBuy
-            ? 'signal-live-buy'
-            : isLive && !isBuy
-              ? 'signal-live-sell'
-              : ''
+  const isActiveOrTracked = signal.status === 'active' || isTracking;
+  const phaseClass = isActiveOrTracked
+    ? isLiveTracking
+      ? isBuy ? 'signal-live-buy' : 'signal-live-sell'
+      : isPreparing && !isFinal5
+        ? 'animate-pulse-prepare'
+        : isFinal5 && isBuy
+          ? 'animate-flash-buy'
+          : isFinal5 && !isBuy
+            ? 'animate-flash-sell'
+            : isLive && isBuy
+              ? 'signal-live-buy'
+              : isLive && !isBuy
+                ? 'signal-live-sell'
+                : ''
     : '';
 
   return (
@@ -85,12 +109,18 @@ export function SignalCard({ signal, onExecute, onViewDetail }: SignalCardProps)
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          {isPreparing && (
+          {isPreparing && !isTracking && (
             <Badge variant="caution" pulse>PREPARE</Badge>
           )}
-          <Badge variant={signal.status === 'active' ? 'profit' : 'default'} pulse={signal.status === 'active' && !isPreparing}>
-            {signal.status === 'active' ? (isPreparing ? 'PENDING' : 'LIVE') : signal.status.toUpperCase()}
-          </Badge>
+          {isLiveTracking ? (
+            <Badge variant="electric" pulse>TRACKING</Badge>
+          ) : isResolved ? (
+            <Badge variant="default">RESOLVING</Badge>
+          ) : (
+            <Badge variant={signal.status === 'active' ? 'profit' : 'default'} pulse={signal.status === 'active' && !isPreparing}>
+              {signal.status === 'active' ? (isPreparing ? 'PENDING' : 'LIVE') : signal.status.toUpperCase()}
+            </Badge>
+          )}
           <Badge variant="electric">{signal.signal_type}</Badge>
           <Badge variant="default">
             <Clock size={10} className="mr-0.5" />
@@ -144,9 +174,41 @@ export function SignalCard({ signal, onExecute, onViewDetail }: SignalCardProps)
         </div>
       </div>
 
-      {/* Countdown Timer */}
+      {/* Countdown Timer / Live Tracking Progress */}
       <div className="mb-4">
-        <CountdownTimer startTime={startTime} expiresAt={expiresAt} totalSeconds={signal.expiration_seconds} />
+        {isLiveTracking ? (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-sm">
+              <span className="flex items-center gap-1.5 text-electric">
+                <Radio size={12} className="animate-pulse" />
+                Live Tracking
+              </span>
+              <span className="font-mono font-bold tabular-nums text-electric">
+                {Math.ceil(candleRemaining / 1000)}s
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-border-dark rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-1000 bg-electric"
+                style={{ width: `${Math.max(0, candleFraction * 100)}%` }}
+              />
+            </div>
+          </div>
+        ) : isResolved ? (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-text-secondary">Awaiting Result</span>
+              <span className="font-mono font-bold tabular-nums text-caution animate-pulse">
+                RESOLVING...
+              </span>
+            </div>
+            <div className="w-full h-1.5 bg-border-dark rounded-full overflow-hidden">
+              <div className="h-full rounded-full bg-caution animate-pulse" style={{ width: '100%' }} />
+            </div>
+          </div>
+        ) : (
+          <CountdownTimer startTime={startTime} expiresAt={expiresAt} totalSeconds={signal.expiration_seconds} />
+        )}
       </div>
 
       {/* Martingale Step */}
@@ -167,11 +229,62 @@ export function SignalCard({ signal, onExecute, onViewDetail }: SignalCardProps)
 
       {/* Actions */}
       <div className="flex gap-2">
-        {signal.status === 'active' && !isPreparing && onExecute && (
-          <Button variant="primary" size="sm" className="flex-1" onClick={() => onExecute(signal.id)}>
-            Execute Now
-          </Button>
-        )}
+        {onExecute && (() => {
+          const handleTrack = () => {
+            setIsTracking(true);
+            onExecute(signal.id);
+          };
+
+          // Tracking in progress (clicked or backend confirmed)
+          if (isTracking && now < expiresAt) {
+            return (
+              <Button variant="primary" size="sm" className="flex-1 animate-pulse" disabled>
+                Tracking...
+              </Button>
+            );
+          }
+          // Tracking complete, awaiting resolution
+          if (isResolved) {
+            return (
+              <Button variant="secondary" size="sm" className="flex-1 animate-pulse" disabled>
+                Awaiting Result...
+              </Button>
+            );
+          }
+          // Expired — only if NOT tracking and past grace period
+          if (isExpired) {
+            return (
+              <Button variant="secondary" size="sm" className="flex-1 opacity-50" disabled>
+                Expired
+              </Button>
+            );
+          }
+          // Window closed (live, past 15s, not tracked)
+          if (isWindowClosed && !isTracking) {
+            return (
+              <Button variant="secondary" size="sm" className="flex-1 opacity-50" disabled>
+                Window Closed
+              </Button>
+            );
+          }
+          // Entry window open (final 5s of prep or first 15s of live)
+          if (signal.status === 'active' && (isFinal5 || isGracePeriod)) {
+            return (
+              <Button variant="primary" size="sm" className="flex-1" onClick={handleTrack}>
+                Track Trade
+              </Button>
+            );
+          }
+          // Pending (preparing, not final 5)
+          if (signal.status === 'active' && isPreparing) {
+            return (
+              <Button variant="secondary" size="sm" className="flex-1 opacity-50" disabled>
+                Track Trade
+              </Button>
+            );
+          }
+          return null;
+        })()}
         {onViewDetail && (
           <Button variant="secondary" size="sm" className="flex-1" onClick={() => onViewDetail(signal.id)}>
             View Analysis

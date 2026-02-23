@@ -100,6 +100,25 @@ export async function tradeRoutes(app: FastifyInstance) {
     return reply.status(201).send(result);
   });
 
+  // ─── POST /trades/track — Deferred trade tracking ────────
+  app.post('/track', async (request, reply) => {
+    const userId = request.user.sub;
+    const { signal_id } = request.body as { signal_id: string };
+
+    if (!signal_id) {
+      return reply.status(400).send({ success: false, error: 'signal_id required' });
+    }
+
+    const { trackSignalForUser } = await import('../services/execution.service.js');
+    const result = await trackSignalForUser(userId, signal_id, (app as any).io);
+
+    if (!result.success) {
+      return reply.status(400).send(result);
+    }
+
+    return reply.status(201).send(result);
+  });
+
   // ─── GET /trades/:id ─────────────────────────────────────
   app.get('/:id', async (request, reply) => {
     const userId = request.user.sub;

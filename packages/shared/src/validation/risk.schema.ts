@@ -39,7 +39,7 @@ export const loginSchema = z.object({
 export const signalSchema = z.object({
   instrument: z.string(),
   direction: z.enum(['BUY', 'SELL']),
-  start_time: z.string().datetime().optional(),
+  start_time: z.string().datetime({ offset: true }).optional(),
   signal_type: z.enum(['TURBO', 'SHORT']),
   confidence: z.number().min(0).max(100),
   confirming_strategies: z.array(z.string()).min(1),

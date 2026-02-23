@@ -38,9 +38,9 @@ export default function SignalsPage() {
 
   const handleExecute = async (signalId: string) => {
     try {
-      await apiPost('/trades/execute', { signal_id: signalId });
+      await apiPost('/trades/track', { signal_id: signalId });
     } catch (err) {
-      console.error('Execution failed:', err);
+      console.error('Tracking failed:', err);
     }
   };
 

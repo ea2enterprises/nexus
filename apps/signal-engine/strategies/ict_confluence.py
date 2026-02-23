@@ -397,8 +397,11 @@ def analyze(candles: list[Candle], instrument: str, killzone: dict) -> Signal | 
     strike = compute_strike_price(fvg, instrument)
 
     # Strict candle alignment: start_time must be exactly :00 (top of next minute)
+    # Guarantee at least 10s of prep time so the card isn't born expired
     now = datetime.now(timezone.utc)
     next_min = math.ceil(now.timestamp() / 60) * 60
+    if next_min - now.timestamp() < 10:
+        next_min += 60
     start_time = datetime.fromtimestamp(next_min, tz=timezone.utc).isoformat()
 
     dec = 3 if "JPY" in instrument else 5
