@@ -6,6 +6,7 @@ import { MartingaleWidget } from '@/components/risk/MartingaleWidget';
 import { GlobalClock } from './GlobalClock';
 import { resumeAudioContext } from '@/hooks/use-trade-audio';
 import { Bell, LogOut, Settings, User, Volume2, VolumeX } from 'lucide-react';
+import { BrokerStatus } from './BrokerStatus';
 import { useState, useEffect } from 'react';
 
 export function Navbar() {
@@ -47,6 +48,7 @@ export function Navbar() {
         <div className="flex items-center gap-2">
           {mounted && isAuthenticated ? (
             <>
+              <BrokerStatus />
               <button
                 onClick={async () => {
                   await resumeAudioContext();

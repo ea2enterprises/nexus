@@ -2,14 +2,25 @@ import { sql } from '../db/client.js';
 import { getSignalById, markSignalExecuted } from './signal.service.js';
 import { getActiveRiskProfile } from './risk.service.js';
 import { getMartingaleState, processTradeResult, computeDoubleDownSize } from './martingale.service.js';
-import { MockBroker } from '../brokers/mock.broker.js';
+import { brokerSession } from '../brokers/session.manager.js';
 import { broadcastTradeUpdate, broadcastMartingaleUpdate } from '../ws/socket.js';
 import crypto from 'crypto';
 import type { Server as SocketIOServer } from 'socket.io';
 
-const broker = new MockBroker();
+async function getPaperMode(userId: string): Promise<boolean> {
+  const connections = await sql`
+    SELECT connection_status FROM broker_connections
+    WHERE user_id = ${userId} AND broker_name = 'pocket_option'
+    ORDER BY created_at DESC LIMIT 1
+  `;
+  // Live mode only if a PO connection is active AND the live broker is authenticated
+  return !(connections.length > 0 && connections[0].connection_status === 'connected' && brokerSession.getStatus().connected);
+}
 
 export async function executeSignalForUser(userId: string, signalId: string) {
+  const paperMode = await getPaperMode(userId);
+  const broker = brokerSession.getBroker(paperMode);
+
   // 1. Get signal
   const signal = await getSignalById(signalId);
   if (!signal) return { success: false, error: 'Signal not found' };
@@ -153,6 +164,9 @@ async function updateDailyStats(userId: string, isWin: boolean, pnl: number, hal
 
 // ─── Deferred Trade Tracking ─────────────────────────────────
 export async function trackSignalForUser(userId: string, signalId: string, io: SocketIOServer | null) {
+  const paperMode = await getPaperMode(userId);
+  const broker = brokerSession.getBroker(paperMode);
+
   // 1. Get signal
   const signal = await getSignalById(signalId);
   if (!signal) return { success: false, error: 'Signal not found' };
@@ -204,7 +218,7 @@ export async function trackSignalForUser(userId: string, signalId: string, io: S
     return { success: false, error: 'Would exceed maximum concurrent exposure' };
   }
 
-  // 7. Open trade with pending result (no exit_price, no result yet)
+  // 7. Open trade with pending result
   const tradeId = `TRD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
   const entryTime = new Date().toISOString();
 
@@ -222,35 +236,37 @@ export async function trackSignalForUser(userId: string, signalId: string, io: S
     RETURNING *
   `;
 
-  // 8. Mark signal as executed and broadcast status change
+  // 8. Mark signal as executed and broadcast
   const [executedSignal] = await markSignalExecuted(signalId);
   if (io && executedSignal) {
-    io.emit('signal:new', executedSignal); // reuse signal:new to upsert in store
+    io.emit('signal:new', executedSignal);
   }
 
-  // 9. Increment paper trade count
+  // 9. Increment trade count
   await sql`
     UPDATE users SET paper_trade_count = paper_trade_count + 1 WHERE id = ${userId}
   `;
 
-  // 10. Schedule deferred resolution at candle expiry
+  // 10. Resolve trade result
+  //   - Live mode: place trade NOW — broker.placeTrade() returns a Promise that resolves
+  //     when PocketOption sends the result event at candle expiry (~60s).
+  //   - Paper mode: wait until candle expiry, then simulate result with MockBroker.
+  const tradeRequest = {
+    instrument: signal.instrument,
+    direction: signal.direction,
+    entryPrice: Number(signal.strike_price),
+    positionSize,
+    duration: Number(signal.expiration_seconds),
+  };
+
   const expiresAt = startTime + signal.expiration_seconds * 1000;
   const msUntilExpiry = Math.max(0, expiresAt - Date.now());
 
-  setTimeout(async () => {
+  const resolveResult = async () => {
     try {
-      // Resolve with MockBroker
-      const brokerResult = await broker.placeTrade({
-        instrument: signal.instrument,
-        direction: signal.direction,
-        entryPrice: Number(signal.strike_price),
-        positionSize,
-        duration: Number(signal.expiration_seconds),
-      });
-
+      const brokerResult = await broker.placeTrade(tradeRequest);
       const isWin = brokerResult.pnl > 0;
 
-      // Update trade with resolution
       const [resolved] = await sql`
         UPDATE trades
         SET exit_price = ${brokerResult.exitPrice},
@@ -262,7 +278,6 @@ export async function trackSignalForUser(userId: string, signalId: string, io: S
         RETURNING *
       `;
 
-      // Process martingale state
       const martResult = await processTradeResult(
         userId,
         signal.instrument,
@@ -274,10 +289,8 @@ export async function trackSignalForUser(userId: string, signalId: string, io: S
         }
       );
 
-      // Update daily stats
       await updateDailyStats(userId, isWin, Number(brokerResult.pnl), martResult.halted);
 
-      // Broadcast trade result and martingale update
       if (io) {
         broadcastTradeUpdate(io, userId, resolved);
 
@@ -289,7 +302,6 @@ export async function trackSignalForUser(userId: string, signalId: string, io: S
         });
       }
 
-      // Auto-Martingale: if loss at step 0 and martingale enabled, generate step 1 signal
       if (!isWin && martState.currentStep === '0' && riskProfile.martingale_enabled && io) {
         const martSignalId = `NXS-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${signal.instrument.replace('/', '-')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}-M1`;
         const nextMinute = Math.ceil(Date.now() / 60000) * 60000;
@@ -325,12 +337,20 @@ export async function trackSignalForUser(userId: string, signalId: string, io: S
         io.emit('signal:new', martSignal);
       }
     } catch (err) {
-      console.error(`Deferred resolution failed for trade ${trade.id}:`, err);
+      console.error(`Trade resolution failed for trade ${trade.id}:`, err);
     }
-  }, msUntilExpiry);
+  };
+
+  if (paperMode) {
+    // Paper: wait for candle to expire, then mock-resolve
+    setTimeout(resolveResult, msUntilExpiry);
+  } else {
+    // Live: send to PO now — Promise resolves when WS result event fires
+    resolveResult();
+  }
 
   return {
     success: true,
-    data: { trade },
+    data: { trade, mode: paperMode ? 'paper' : 'live' },
   };
 }

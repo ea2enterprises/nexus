@@ -6,7 +6,7 @@ import { useAppStore } from '@/stores/app.store';
 import type { Signal, Trade, MartingaleState } from '@nexus/shared';
 
 export function useSocket() {
-  const { user, addSignal, addTrade, updateMartingaleState } = useAppStore();
+  const { user, addSignal, addTrade, updateMartingaleState, setBrokerConnected, setBrokerDisconnected } = useAppStore();
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -27,14 +27,29 @@ export function useSocket() {
       updateMartingaleState(state);
     });
 
+    socket.on('broker:connected', ({ isDemo }: { isDemo: boolean }) => {
+      setBrokerConnected(true, isDemo);
+    });
+
+    socket.on('broker:disconnected', ({ reason }: { reason: string }) => {
+      setBrokerDisconnected(reason);
+    });
+
+    socket.on('broker:reconnect_failed', () => {
+      setBrokerDisconnected('reconnect_failed');
+    });
+
     return () => {
       socket.off('signal:new');
       socket.off('trade:update');
       socket.off('martingale:update');
+      socket.off('broker:connected');
+      socket.off('broker:disconnected');
+      socket.off('broker:reconnect_failed');
       disconnectSocket();
       initialized.current = false;
     };
-  }, [user, addSignal, addTrade, updateMartingaleState]);
+  }, [user, addSignal, addTrade, updateMartingaleState, setBrokerConnected, setBrokerDisconnected]);
 
   return getSocket();
 }

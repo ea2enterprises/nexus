@@ -38,3 +38,7 @@ export function broadcastTradeUpdate(io: SocketIOServer, userId: string, trade: 
 export function broadcastMartingaleUpdate(io: SocketIOServer, userId: string, state: any) {
   io.to(`user:${userId}`).emit('martingale:update', state);
 }
+
+export function broadcastBrokerStatus(io: SocketIOServer, status: any) {
+  io.emit('broker:status', status);
+}

@@ -44,6 +44,13 @@ interface AppState {
   audioReady: boolean;
   toggleMute: () => void;
   setAudioReady: (ready: boolean) => void;
+
+  // Broker
+  brokerConnected: boolean;
+  brokerIsDemo: boolean;
+  brokerDisconnectReason: string | null;
+  setBrokerConnected: (connected: boolean, isDemo?: boolean) => void;
+  setBrokerDisconnected: (reason: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -123,4 +130,13 @@ export const useAppStore = create<AppState>((set) => ({
     return { isMuted: next };
   }),
   setAudioReady: (ready) => set({ audioReady: ready }),
+
+  // Broker
+  brokerConnected: false,
+  brokerIsDemo: true,
+  brokerDisconnectReason: null,
+  setBrokerConnected: (connected, isDemo = true) =>
+    set({ brokerConnected: connected, brokerIsDemo: isDemo, brokerDisconnectReason: null }),
+  setBrokerDisconnected: (reason) =>
+    set({ brokerConnected: false, brokerDisconnectReason: reason }),
 }));

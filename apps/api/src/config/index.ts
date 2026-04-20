@@ -28,4 +28,9 @@ export const config = {
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   },
+
+  pocketOption: {
+    ssid: process.env.PO_SSID || '',
+    isDemo: process.env.PO_IS_DEMO !== 'false', // default true (demo)
+  },
 } as const;

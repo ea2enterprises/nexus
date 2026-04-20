@@ -12,6 +12,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { userRoutes } from './routes/users.js';
 import { brokerRoutes } from './routes/broker.js';
 import { setupSocketHandlers } from './ws/socket.js';
+import { brokerSession } from './brokers/session.manager.js';
 
 const app = Fastify({ logger: true });
 
@@ -57,6 +58,20 @@ const start = async () => {
     setupSocketHandlers(io);
     // Update the io reference for routes
     (app as any).io = io;
+
+    // Give session manager access to Socket.IO for broker events
+    brokerSession.setIO(io);
+
+    // Auto-connect PocketOption if SSID is configured in env
+    if (config.pocketOption.ssid) {
+      console.log('[PocketOption] Auto-connecting with PO_SSID from env...');
+      brokerSession.connect(config.pocketOption.ssid, config.pocketOption.isDemo).then(() => {
+        console.log(`[PocketOption] Connected — ${config.pocketOption.isDemo ? 'DEMO' : 'LIVE'} mode`);
+      }).catch((err: Error) => {
+        console.warn('[PocketOption] Auto-connect failed:', err.message);
+        console.warn('[PocketOption] Submit a fresh SSID via POST /broker/session');
+      });
+    }
 
     console.log('Socket.IO attached');
   } catch (err) {
